@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 30px auto;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      cursor: pointer;
+      margin: 5px 0;
+    }
+    .zone {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      margin: 4px 0 10px 0;
+      box-sizing: border-box;
+    }
+    .info {
+      font-size: 0.9em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="choix">
+    <p>Choisir une section :</p>
+    <button onclick="afficherLogin('encode')">Accès encodeur</button>
+    <button onclick="afficherLogin('decode')">Accès décodeur</button>
+    <button onclick="afficherGestionMdp()">Gérer les mots de passe</button>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="login" style="display:none;">
+    <p>Entrer le mot de passe :</p>
+    <input type="password" id="code" placeholder="Mot de passe...">
+    <button onclick="verifierCode()">Valider</button>
+    <p id="erreur" style="color:red;"></p>
+    <p class="info" id="infoMdp"></p>
+    <button onclick="retour()">Retour</button>
+  </div>
+
+  <!-- GESTION MOTS DE PASSE -->
+  <div id="gestionMdp" class="zone">
+    <p><strong>Créer / modifier les mots de passe</strong></p>
+
+    <p>Mot de passe encodeur :</p>
+    <input type="password" id="nouveauMdpEncodeur" placeholder="Nouveau mot de passe encodeur">
+    <button onclick="enregistrerMdp('encode')">Enregistrer mot de passe encodeur</button>
+
+    <p>Mot de passe décodeur :</p>
+    <input type="password" id="nouveauMdpDecodeur" placeholder="Nouveau mot de passe décodeur">
+    <button onclick="enregistrerMdp('decode')">Enregistrer mot de passe décodeur</button>
+
+    <p class="info">
+      Les mots de passe sont stockés localement dans ce navigateur (localStorage).
+    </p>
+    <button onclick="retour()">Retour</button>
+  </div>
+
+  <!-- ENCODEUR -->
+  <div id="zoneEncode" class="zone">
+    <textarea id="inputText" placeholder="Écris ici..."></textarea>
+    <button onclick="encoder()">Convertir</button>
+    <textarea id="outputCode" readonly></textarea>
+    <button onclick="retour()">Retour</button>
+  </div>
+
+  <!-- DECODEUR -->
+  <div id="zoneDecode" class="zone">
+    <textarea id="inputCode" placeholder="Colle ici le code..."></textarea>
+    <button onclick="decoder()">Recomposer</button>
+    <textarea id="outputText" readonly></textarea>
+    <button onclick="retour()">Retour</button>
+  </div>
+
+  <script>
+    let sectionDemandee = null;
+    let essais = 0;
+
+    // --- Gestion blocage erreurs ---
+    function estDebloque() {
+      const blocage = localStorage.getItem("blocage");
+      if (!blocage) return true;
+      const maintenant = Date.now();
+      return (maintenant - parseInt(blocage)) >= 3600000;
+    }
+
+    function tempsRestant() {
+      const blocage = localStorage.getItem("blocage");
+      if (!blocage) return "";
+      const maintenant = Date.now();
+      const diff = 3600000 - (maintenant - parseInt(blocage));
+      const minutes = Math.floor(diff / 60000);
+      const secondes = Math.floor((diff % 60000) / 1000);
+      return minutes + " min " + secondes + " sec";
+    }
+
+    // --- Gestion affichage zones ---
+    function afficherLogin(section) {
+      sectionDemandee = section;
+      document.getElementById("choix").style.display = "none";
+      document.getElementById("gestionMdp").style.display = "none";
+      document.getElementById("login").style.display = "block";
+
+      const info = document.getElementById("infoMdp");
+      const mdpEncodeur = localStorage.getItem("mdpEncodeur");
+      const mdpDecodeur = localStorage.getItem("mdpDecodeur");
+
+      if (section === "encode" && !mdpEncodeur) {
+        info.textContent = "Aucun mot de passe encodeur défini. Va dans 'Gérer les mots de passe' pour en créer un.";
+      } else if (section === "decode" && !mdpDecodeur) {
+        info.textContent = "Aucun mot de passe décodeur défini. Va dans 'Gérer les mots de passe' pour en créer un.";
+      } else {
+        info.textContent = "";
+      }
+    }
+
+    function afficherGestionMdp() {
+      document.getElementById("choix").style.display = "none";
+      document.getElementById("login").style.display = "none";
+      document.getElementById("zoneEncode").style.display = "none";
+      document.getElementById("zoneDecode").style.display = "none";
+      document.getElementById("gestionMdp").style.display = "block";
+
+      document.getElementById("nouveauMdpEncodeur").value = "";
+      document.getElementById("nouveauMdpDecodeur").value = "";
+    }
+
+    function enregistrerMdp(type) {
+      if (type === "encode") {
+        const mdp = document.getElementById("nouveauMdpEncodeur").value;
+        if (!mdp) {
+          alert("Mot de passe encodeur vide.");
+          return;
+        }
+        localStorage.setItem("mdpEncodeur", mdp);
+        alert("Mot de passe encodeur enregistré.");
+      } else if (type === "decode") {
+        const mdp = document.getElementById("nouveauMdpDecodeur").value;
+        if (!mdp) {
+          alert("Mot de passe décodeur vide.");
+          return;
+        }
+        localStorage.setItem("mdpDecodeur", mdp);
+        alert("Mot de passe décodeur enregistré.");
+      }
+    }
+
+    // --- Vérification mot de passe ---
+    function verifierCode() {
+      const erreur = document.getElementById("erreur");
+
+      if (!estDebloque()) {
+        erreur.textContent = "Accès bloqué. Réessaie dans " + tempsRestant();
+        return;
+      }
+
+      localStorage.removeItem("blocage");
+      essais = 0;
+
+      const saisie = document.getElementById("code").value;
+      const mdpEncodeur = localStorage.getItem("mdpEncodeur");
+      const mdpDecodeur = localStorage.getItem("mdpDecodeur");
+
+      if (sectionDemandee === "encode") {
+        if (!mdpEncodeur) {
+          erreur.textContent = "Aucun mot de passe encodeur défini. Va dans 'Gérer les mots de passe'.";
+          return;
+        }
+        if (saisie === mdpEncodeur) {
+          document.getElementById("login").style.display = "none";
+          document.getElementById("zoneEncode").style.display = "block";
+          document.getElementById("code").value = "";
+          erreur.textContent = "";
+          return;
+        }
+      }
+
+      if (sectionDemandee === "decode") {
+        if (!mdpDecodeur) {
+          erreur.textContent = "Aucun mot de passe décodeur défini. Va dans 'Gérer les mots de passe'.";
+          return;
+        }
+        if (saisie === mdpDecodeur) {
+          document.getElementById("login").style.display = "none";
+          document.getElementById("zoneDecode").style.display = "block";
+          document.getElementById("code").value = "";
+          erreur.textContent = "";
+          return;
+        }
+      }
+
+      essais++;
+      erreur.textContent = "Mot de passe incorrect (" + essais + "/5)";
+
+      if (essais >= 5) {
+        erreur.textContent = "Accès bloqué pendant 1 heure";
+        localStorage.setItem("blocage", Date.now());
+      }
+    }
+
+    // --- ENCODAGE ---
+    function encoder() {
+      let texte = document.getElementById("inputText").value;
+      texte = texte.replace(/\s+/g, " ");
+
+      let resultat = "";
+      let first = true;
+
+      for (let char of texte) {
+        const code = char.toLowerCase().charCodeAt(0);
+
+        if (code >= 97 && code <= 122) {
+          if (!first) resultat += "§";
+          resultat += (code - 96);
+          first = false;
+        }
+        else if (char === " ") {
+          resultat += " ";
+          first = true;
+        }
+        else if (char === ",") {
+          resultat += ",";
+        }
+        else {
+          resultat += char;
+        }
+      }
+
+      document.getElementById("outputCode").value = resultat;
+    }
+
+    // --- DÉCODAGE ---
+    function decoder() {
+      let codeBrut = document.getElementById("inputCode").value;
+      codeBrut = codeBrut.replace(/\s+/g, " ");
+
+      let resultat = "";
+      let mots = codeBrut.split(" ");
+
+      for (let mot of mots) {
+
+        if (mot.includes(",")) {
+          let parties = mot.split(",");
+          let avant = parties[0];
+          let apres = parties[1];
+
+          let lettres1 = avant.split("§");
+          for (let l of lettres1) {
+            if (l === "") continue;
+            let num = parseInt(l);
+            if (num >= 1 && num <= 26) resultat += String.fromCharCode(num + 96);
+          }
+
+          resultat += ",";
+
+          if (apres) {
+            let lettres2 = apres.split("§");
+            for (let l of lettres2) {
+              if (l === "") continue;
+              let num = parseInt(l);
+              if (num >= 1 && num <= 26) resultat += String.fromCharCode(num + 96);
+            }
+          }
+
+          resultat += " ";
+          continue;
+        }
+
+        let lettres = mot.split("§");
+        for (let l of lettres) {
+          if (l === "") continue;
+          let num = parseInt(l);
+          if (num >= 1 && num <= 26) {
+            resultat += String.fromCharCode(num + 96);
+          }
+        }
+
+        resultat += " ";
+      }
+
+      document.getElementById("outputText").value = resultat.trim();
+    }
+
+    // --- RETOUR ---
+    function retour() {
+      document.getElementById("zoneEncode").style.display = "none";
+      document.getElementById("zoneDecode").style.display = "none";
+      document.getElementById("login").style.display = "none";
+      document.getElementById("gestionMdp").style.display = "none";
+      document.getElementById("choix").style.display = "block";
+      document.getElementById("code").value = "";
+      document.getElementById("erreur").textContent = "";
+      document.getElementById("infoMdp").textContent = "";
+    }
+  </script>
+
+</body>
+</html>
